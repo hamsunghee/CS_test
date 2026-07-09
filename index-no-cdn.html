@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>반품 검수 MVP</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <noscript>이 앱은 JavaScript가 켜져 있어야 사용할 수 있습니다.</noscript>
+
+  <div id="app" class="app-shell">
+    <header class="top-header">
+      <div>
+        <p class="eyebrow">Return Inspection MVP</p>
+        <h1>반품 검수 관리</h1>
+      </div>
+      <div id="headerSyncBadge" class="sync-badge">확인 중</div>
+    </header>
+
+    <main id="view" class="view-area"></main>
+
+    <nav class="bottom-nav" aria-label="주요 메뉴">
+      <button class="nav-btn active" data-tab="form" type="button">
+        <span>▣</span>
+        <small>검수</small>
+      </button>
+      <button class="nav-btn" data-tab="history" type="button">
+        <span>≡</span>
+        <small>내역</small>
+      </button>
+      <button class="nav-btn" data-tab="stats" type="button">
+        <span>⌁</span>
+        <small>통계</small>
+      </button>
+      <button class="nav-btn" data-tab="settings" type="button">
+        <span>⚙</span>
+        <small>설정</small>
+      </button>
+    </nav>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- 외부 CDN을 전혀 쓰지 않는 버전입니다. 바코드 스캔은 브라우저 기본 BarcodeDetector 지원 기기에서만 동작합니다. -->
+  <script src="./app.js"></script>
+</body>
+</html>

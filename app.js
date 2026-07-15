@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby1Va7aUCMpVTPO_cxBRW8uW_fFaLzHkwicu4u8aVt2UBwCJxmzo0_fnA12-2940v0/exec';
+  const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw38AWma-DqnK8pQ-xhessKn6ZjFxYG_-znr1IAAVuL5mI9wEKdQTF3H6nbyzv9__Q/exec';
   const LS_RECORDS = 'return_inspection_mvp_records_v1';
   const LS_CONFIG = 'return_inspection_mvp_config_v1';
   const MAX_PHOTOS = 4;
@@ -21,7 +21,7 @@
     lookup: {
       status: 'idle',
       message: '',
-      invoiceNumber: '',
+      productBarcode: '',
       data: null
     },
     historySearch: '',
@@ -34,6 +34,7 @@
 
   function getEmptyForm() {
     return {
+      productBarcode: '',
       invoiceNumber: '',
       orderNumber: '',
       productName: '',
@@ -130,7 +131,7 @@
   function renderLookupStatus() {
     const lookup = state.lookup || { status: 'idle' };
     if (lookup.status === 'idle') {
-      return '<div class="lookup-box muted">송장번호를 스캔/입력하면 Apps Script가 상품리스트 탭에서 주문번호와 상품명을 찾아옵니다.</div>';
+      return '<div class="lookup-box muted">상품 바코드를 스캔/입력하면 Apps Script가 상품리스트 탭에서 주문번호와 상품명을 찾아옵니다.</div>';
     }
     if (lookup.status === 'loading') {
       return `<div class="lookup-box loading"><span class="spinner"></span><span>${escapeHtml(lookup.message || '상품 정보를 조회 중입니다...')}</span></div>`;
@@ -147,7 +148,7 @@
       return `<div class="lookup-box ok"><strong>상품리스트 매칭 완료</strong><div class="lookup-lines">${lines}</div></div>`;
     }
     if (lookup.status === 'not_found') {
-      return `<div class="lookup-box warn">${escapeHtml(lookup.message || '상품리스트에서 일치하는 송장번호를 찾지 못했습니다. 필요하면 직접 입력하세요.')}</div>`;
+      return `<div class="lookup-box warn">${escapeHtml(lookup.message || '상품리스트에서 일치하는 상품 바코드를 찾지 못했습니다. 필요하면 직접 입력하세요.')}</div>`;
     }
     return `<div class="lookup-box error">${escapeHtml(lookup.message || '상품 정보 조회 중 오류가 발생했습니다. 직접 입력하거나 설정을 확인하세요.')}</div>`;
   }
@@ -157,8 +158,8 @@
     if (el) el.innerHTML = renderLookupStatus();
   }
 
-  function setLookupStatus(status, message = '', data = null, invoiceNumber = '') {
-    state.lookup = { status, message, data, invoiceNumber };
+  function setLookupStatus(status, message = '', data = null, productBarcode = '') {
+    state.lookup = { status, message, data, productBarcode };
     updateLookupStatusDom();
   }
 
@@ -169,12 +170,12 @@
     }
   }
 
-  function scheduleProductLookup(invoiceNumber) {
+  function scheduleProductLookup(productBarcode) {
     clearLookupTimer();
-    const invoice = String(invoiceNumber || '').trim();
+    const barcode = String(productBarcode || '').trim();
     if (!state.config.autoLookup) return setLookupStatus('idle');
-    if (!invoice || invoice.length < LOOKUP_MIN_LENGTH) return setLookupStatus('idle');
-    state.lookupTimer = setTimeout(() => lookupProductByInvoice(invoice), LOOKUP_DEBOUNCE_MS);
+    if (!barcode || barcode.length < LOOKUP_MIN_LENGTH) return setLookupStatus('idle');
+    state.lookupTimer = setTimeout(() => lookupProductByBarcode(barcode), LOOKUP_DEBOUNCE_MS);
   }
 
   function setActiveTab(tab) {
@@ -203,20 +204,33 @@
 
       <form id="inspectionForm" autocomplete="off">
         <section class="card">
-          <h2 class="card-title">송장 스캔</h2>
+          <h2 class="card-title">상품 바코드 스캔</h2>
+          <p class="card-subtitle">상품 바코드를 스캔하거나 직접 입력하면 상품리스트 탭과 매칭해 상품 정보를 자동으로 채웁니다.</p>
           <div class="field">
-            <label for="invoiceNumber">송장번호 <span class="required">*</span></label>
+            <label for="productBarcode">상품 바코드 <span class="optional">선택</span></label>
             <div class="input-row">
-              <input id="invoiceNumber" class="input mono" type="text" inputmode="numeric" placeholder="송장번호 입력 또는 스캔" value="${escapeHtml(f.invoiceNumber)}" />
-              <button id="scanBtn" class="btn btn-dark btn-scan" type="button">▦ 스캔</button>
+              <input id="productBarcode" class="input mono" type="text" inputmode="numeric" placeholder="상품 바코드 입력 또는 스캔" value="${escapeHtml(f.productBarcode)}" />
+              <button id="productScanBtn" class="btn btn-dark btn-scan" type="button">▦ 스캔</button>
             </div>
             <div id="lookupStatus" class="lookup-status">${renderLookupStatus()}</div>
           </div>
         </section>
 
         <section class="card">
+          <h2 class="card-title">송장번호 스캔</h2>
+          <p class="card-subtitle">택배 송장번호는 배송 추적/반품 기록용입니다. 스캔 또는 수기 입력 모두 가능합니다.</p>
+          <div class="field">
+            <label for="invoiceNumber">송장번호 <span class="optional">선택</span></label>
+            <div class="input-row">
+              <input id="invoiceNumber" class="input mono" type="text" inputmode="numeric" placeholder="송장번호 입력 또는 스캔" value="${escapeHtml(f.invoiceNumber)}" />
+              <button id="invoiceScanBtn" class="btn btn-dark btn-scan" type="button">▦ 스캔</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
           <h2 class="card-title">상품 정보</h2>
-          <p class="card-subtitle">주문번호와 상품명/단품코드는 선택 입력입니다. 송장번호가 상품리스트 탭과 매칭되면 자동으로 채워집니다.</p>
+          <p class="card-subtitle">주문번호와 상품명/단품코드는 선택 입력입니다. 상품 바코드가 상품리스트 탭과 매칭되면 자동으로 채워집니다.</p>
           <div class="field">
             <label for="orderNumber">주문번호 <span class="optional">선택</span></label>
             <input id="orderNumber" class="input" type="text" placeholder="자동 조회 또는 직접 입력" value="${escapeHtml(f.orderNumber)}" />
@@ -287,17 +301,18 @@
       if (!el) return;
       el.addEventListener('input', () => { state.form[key] = el.value; });
     };
-    const invoiceInput = $('#invoiceNumber');
-    if (invoiceInput) {
-      invoiceInput.addEventListener('input', () => {
-        state.form.invoiceNumber = invoiceInput.value;
-        scheduleProductLookup(invoiceInput.value);
+    const productBarcodeInput = $('#productBarcode');
+    if (productBarcodeInput) {
+      productBarcodeInput.addEventListener('input', () => {
+        state.form.productBarcode = productBarcodeInput.value;
+        scheduleProductLookup(productBarcodeInput.value);
       });
-      invoiceInput.addEventListener('blur', () => {
-        const invoice = invoiceInput.value.trim();
-        if (invoice && invoice.length >= LOOKUP_MIN_LENGTH) lookupProductByInvoice(invoice);
+      productBarcodeInput.addEventListener('blur', () => {
+        const barcode = productBarcodeInput.value.trim();
+        if (barcode && barcode.length >= LOOKUP_MIN_LENGTH) lookupProductByBarcode(barcode);
       });
     }
+    bindInput('invoiceNumber', 'invoiceNumber');
     bindInput('orderNumber', 'orderNumber');
     bindInput('productName', 'productName');
     bindInput('returnReasonDetail', 'returnReasonDetail');
@@ -316,7 +331,8 @@
       render();
     });
 
-    $('#scanBtn')?.addEventListener('click', openScanner);
+    $('#productScanBtn')?.addEventListener('click', () => openScanner('productBarcode'));
+    $('#invoiceScanBtn')?.addEventListener('click', () => openScanner('invoiceNumber'));
     $('#addPhotoBtn')?.addEventListener('click', () => $('#photoInput')?.click());
     $('#photoInput')?.addEventListener('change', handlePhotoSelected);
 
@@ -393,11 +409,12 @@
   async function handleSubmit(e) {
     e.preventDefault();
     const f = state.form;
+    const productBarcode = f.productBarcode.trim();
     const invoiceNumber = f.invoiceNumber.trim();
     const orderNumber = f.orderNumber.trim();
     const productName = f.productName.trim();
 
-    if (!invoiceNumber) return toast('송장번호를 입력하거나 스캔해주세요.');
+    if (!productBarcode && !invoiceNumber) return toast('상품 바코드 또는 송장번호 중 하나를 입력하거나 스캔해주세요.');
     if (f.returnReason === '기타' && !f.returnReasonDetail.trim()) return toast('기타 상세 사유를 입력해주세요.');
 
     const btn = $('#submitBtn');
@@ -407,6 +424,7 @@
     const record = {
       id: makeId(),
       createdAt: formatDate(),
+      productBarcode,
       invoiceNumber,
       orderNumber,
       productName,
@@ -490,7 +508,7 @@
           <span class="photo-count">${filtered.length} / ${state.records.length}건</span>
         </h2>
         <div class="input-row" style="margin-bottom:10px">
-          <input id="historySearch" class="input" type="search" placeholder="송장, 주문번호, 상품명 검색" value="${escapeHtml(state.historySearch)}" />
+          <input id="historySearch" class="input" type="search" placeholder="상품바코드, 송장, 주문번호, 상품명 검색" value="${escapeHtml(state.historySearch)}" />
         </div>
         <div class="filter-row" id="filterRow">
           ${['all', '재입고', '폐기', '공장반품'].map((v) => `<button type="button" class="filter-pill ${state.historyFilter === v ? 'active' : ''}" data-filter="${v}">${v === 'all' ? '전체' : v}</button>`).join('')}
@@ -530,7 +548,7 @@
     const q = state.historySearch.trim().toLowerCase();
     return state.records.filter((r) => {
       const matchesFilter = state.historyFilter === 'all' || r.inspectionResult === state.historyFilter;
-      const hay = [r.invoiceNumber, r.orderNumber, r.productName, r.returnReason, r.returnReasonDetail, r.memo, r.workerName].join(' ').toLowerCase();
+      const hay = [r.productBarcode, r.invoiceNumber, r.orderNumber, r.productName, r.returnReason, r.returnReasonDetail, r.memo, r.workerName].join(' ').toLowerCase();
       return matchesFilter && (!q || hay.includes(q));
     });
   }
@@ -550,14 +568,15 @@
         </div>
         <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; padding-left:4px">
           <div>
-            <div class="meta-label">송장번호</div>
-            <div class="meta-value mono">${escapeHtml(r.invoiceNumber)}</div>
+            <div class="meta-label">상품 바코드</div>
+            <div class="meta-value mono">${escapeHtml(r.productBarcode || '')}</div>
           </div>
           <span class="badge ${resultClass}">${escapeHtml(r.inspectionResult)}</span>
         </div>
         <div class="meta-grid">
-          <div><div class="meta-label">주문번호</div><div class="meta-value">${escapeHtml(r.orderNumber)}</div></div>
-          <div><div class="meta-label">상품명</div><div class="meta-value">${escapeHtml(r.productName)}</div></div>
+          <div><div class="meta-label">송장번호</div><div class="meta-value mono">${escapeHtml(r.invoiceNumber || '')}</div></div>
+          <div><div class="meta-label">주문번호</div><div class="meta-value">${escapeHtml(r.orderNumber || '')}</div></div>
+          <div><div class="meta-label">상품명</div><div class="meta-value">${escapeHtml(r.productName || '')}</div></div>
         </div>
         <div class="reason-box"><strong>반품 사유:</strong> ${escapeHtml(r.returnReason)}${r.returnReasonDetail ? ` (${escapeHtml(r.returnReasonDetail)})` : ''}</div>
         ${r.memo ? `<div class="memo-box"><strong>메모:</strong><br>${escapeHtml(r.memo).replaceAll('\n', '<br>')}</div>` : ''}
@@ -633,11 +652,12 @@
 
   function exportCsv() {
     if (!state.records.length) return toast('내보낼 데이터가 없습니다.');
-    const headers = ['저장일시', '송장번호', '주문번호', '상품명', '반품사유', '기타상세', '검수결과', '메모', '사진개수', '담당자', '전송상태'];
+    const headers = ['저장일시', '상품바코드', '송장번호', '주문번호', '상품명', '반품사유', '기타상세', '검수결과', '메모', '사진개수', '담당자', '전송상태'];
     const rows = state.records.map((r) => [
       r.createdAt,
-      `="${r.invoiceNumber}"`,
-      `="${r.orderNumber}"`,
+      `="${r.productBarcode || ''}"`,
+      `="${r.invoiceNumber || ''}"`,
+      `="${r.orderNumber || ''}"`,
       r.productName,
       r.returnReason,
       r.returnReasonDetail || '',
@@ -729,7 +749,7 @@
         </div>
         <label style="display:flex; gap:8px; align-items:flex-start; margin:10px 0; font-size:12px; color:#475569; font-weight:800; line-height:1.45">
           <input id="autoLookup" type="checkbox" ${state.config.autoLookup ? 'checked' : ''} style="margin-top:2px" />
-          <span>송장번호 입력/스캔 후 상품리스트 탭에서 주문번호·상품명을 자동 조회합니다.</span>
+          <span>상품 바코드 입력/스캔 후 상품리스트 탭에서 주문번호·상품명을 자동 조회합니다.</span>
         </label>
         <label style="display:flex; gap:8px; align-items:flex-start; margin:10px 0; font-size:12px; color:#475569; font-weight:800; line-height:1.45">
           <input id="storeLocalPhotos" type="checkbox" ${state.config.storeLocalPhotos ? 'checked' : ''} style="margin-top:2px" />
@@ -744,7 +764,7 @@
       <section class="card">
         <h2 class="card-title">현재 구현 범위</h2>
         ${notice('info', '이 MVP는 현장 입력, 사진 첨부, 구글시트 적재, 로컬 임시보관까지 구현합니다.')}
-        ${notice('info', '송장 스캔 후 상품리스트 탭에서 주문번호와 상품명을 조회하는 기능을 추가했습니다. 단, 상품리스트 탭에 해당 송장번호가 미리 있어야 합니다.')}
+        ${notice('info', '상품 바코드 스캔 후 상품리스트 탭에서 주문번호와 상품명을 조회합니다. 단, 상품리스트 탭에 해당 상품 바코드가 미리 있어야 합니다.')}
         ${notice('warn', '이카운트 ERP 실시간 조회/자동반영, 직원 로그인/권한관리는 이 코드만으로는 구현되어 있지 않습니다.')}
       </section>
 
@@ -780,6 +800,7 @@
     const test = {
       id: makeId(),
       createdAt: formatDate(),
+      productBarcode: 'P-BARCODE-TEST',
       invoiceNumber: 'P-CONN-TEST',
       orderNumber: 'TEST-000',
       productName: '통신 확인용 테스트 행',
@@ -798,27 +819,28 @@
   }
 
   function copyInstallGuide() {
-    const text = `반품 검수 MVP 설치 순서\n\n1. ZIP 파일 압축 해제\n2. index.html, style.css, app.js를 같은 폴더에 둠\n3. 전직원 사용용이면 HTTPS 호스팅에 업로드\n   예: GitHub Pages, Netlify, Cloudflare Pages, 사내 웹서버\n4. Google Apps Script 편집기에서 apps-script/Code.gs 붙여넣기\n5. 배포 > 새 배포 > 웹 앱\n   - 실행 권한: 나\n   - 액세스 권한: 모든 사용자 또는 회사 정책에 맞는 사용자\n6. 생성된 Web App URL을 app.js의 DEFAULT_GAS_URL 또는 앱 설정 탭에 입력\n7. 상품 자동조회 사용 시 apps-script/Code.gs의 PRODUCT_SPREADSHEET_ID와 PRODUCT_SHEET_NAME 확인\n8. 모바일에서 링크 접속 후 카메라 권한 허용\n`;
+    const text = `반품 검수 MVP 설치 순서\n\n1. ZIP 파일 압축 해제\n2. index.html, style.css, app.js를 같은 폴더에 둠\n3. 전직원 사용용이면 HTTPS 호스팅에 업로드\n   예: GitHub Pages, Netlify, Cloudflare Pages, 사내 웹서버\n4. Google Apps Script 편집기에서 apps-script/Code.gs 붙여넣기\n5. 배포 > 새 배포 > 웹 앱\n   - 실행 권한: 나\n   - 액세스 권한: 모든 사용자 또는 회사 정책에 맞는 사용자\n6. 생성된 Web App URL을 app.js의 DEFAULT_GAS_URL 또는 앱 설정 탭에 입력\n7. 상품 바코드 자동조회 사용 시 apps-script/Code.gs의 PRODUCT_SPREADSHEET_ID와 PRODUCT_SHEET_NAME 확인\n8. 모바일에서 링크 접속 후 카메라 권한 허용\n`;
     navigator.clipboard?.writeText(text).then(() => toast('설치 순서를 복사했습니다.')).catch(() => toast('복사에 실패했습니다.'));
   }
 
 
-  async function lookupProductByInvoice(invoiceNumber) {
-    const invoice = String(invoiceNumber || '').trim();
-    if (!invoice || invoice.length < LOOKUP_MIN_LENGTH) return;
+  async function lookupProductByBarcode(productBarcode) {
+    const barcode = String(productBarcode || '').trim();
+    if (!barcode || barcode.length < LOOKUP_MIN_LENGTH) return;
     if (!isGasConfigured()) {
       setLookupStatus('error', 'Apps Script URL이 설정되어 있지 않아 상품 조회를 할 수 없습니다.');
       return;
     }
 
-    setLookupStatus('loading', `송장번호 ${invoice} 조회 중...`, null, invoice);
+    setLookupStatus('loading', `상품 바코드 ${barcode} 조회 중...`, null, barcode);
     try {
       const result = await jsonpRequest(state.config.gasUrl.trim(), {
         action: 'lookup',
-        invoice: invoice
+        productBarcode: barcode,
+        barcode: barcode
       }, 12000);
 
-      if (String(state.form.invoiceNumber || '').trim() !== invoice) return;
+      if (String(state.form.productBarcode || '').trim() !== barcode) return;
 
       if (result && result.ok && result.found) {
         const data = result.data || {};
@@ -831,15 +853,15 @@
         if (orderEl) orderEl.value = state.form.orderNumber;
         if (productEl) productEl.value = state.form.productName;
 
-        setLookupStatus('found', '상품리스트 매칭 완료', data, invoice);
+        setLookupStatus('found', '상품리스트 매칭 완료', data, barcode);
         toast('상품 정보가 자동 입력되었습니다.');
         return;
       }
 
-      setLookupStatus('not_found', '상품리스트에서 일치하는 송장번호를 찾지 못했습니다. 필요하면 상품 정보를 직접 입력하세요.', null, invoice);
+      setLookupStatus('not_found', '상품리스트에서 일치하는 상품 바코드를 찾지 못했습니다. 필요하면 상품 정보를 직접 입력하세요.', null, barcode);
     } catch (err) {
       console.warn('lookup failed', err);
-      setLookupStatus('error', '상품 조회에 실패했습니다. Apps Script 배포 URL/권한과 상품리스트 탭명을 확인하세요.', null, invoice);
+      setLookupStatus('error', '상품 조회에 실패했습니다. Apps Script 배포 URL/권한과 상품리스트 탭명을 확인하세요.', null, barcode);
     }
   }
 
@@ -875,12 +897,14 @@
     document.body.appendChild(overlay);
   }
 
-  function openScanner() {
+  function openScanner(targetKey = 'productBarcode') {
+    const isProduct = targetKey === 'productBarcode';
+    const targetLabel = isProduct ? '상품 바코드' : '송장번호';
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.innerHTML = `
       <div class="modal-head">
-        <h2>송장 바코드 스캔</h2>
+        <h2>${targetLabel} 스캔</h2>
         <button id="scannerCloseBtn" class="btn btn-soft btn-small" type="button">닫기</button>
       </div>
       <div class="scanner-box">
@@ -902,23 +926,24 @@
     const onScan = async (text) => {
       if (!text) return;
       if (navigator.vibrate) navigator.vibrate(80);
-      state.form.invoiceNumber = String(text).trim();
+      const scannedValue = String(text).trim();
+      state.form[targetKey] = scannedValue;
       await close();
       render();
-      toast(`스캔 완료: ${state.form.invoiceNumber}`);
-      lookupProductByInvoice(state.form.invoiceNumber);
+      toast(`${targetLabel} 스캔 완료: ${scannedValue}`);
+      if (isProduct) lookupProductByBarcode(scannedValue);
     };
 
     if (window.Html5Qrcode) {
-      stopFn = startHtml5QrcodeScanner(onScan, modal);
+      stopFn = startHtml5QrcodeScanner(onScan, modal, targetLabel);
     } else if ('BarcodeDetector' in window) {
-      stopFn = startNativeBarcodeScanner(onScan, modal);
+      stopFn = startNativeBarcodeScanner(onScan, modal, targetLabel);
     } else {
-      $('#scannerStatus', modal).textContent = '이 브라우저는 바코드 스캔을 지원하지 않습니다. 송장번호를 직접 입력해주세요.';
+      $('#scannerStatus', modal).textContent = `이 브라우저는 바코드 스캔을 지원하지 않습니다. ${targetLabel}를 직접 입력해주세요.`;
     }
   }
 
-  function startHtml5QrcodeScanner(onScan, modal) {
+  function startHtml5QrcodeScanner(onScan, modal, targetLabel = '바코드') {
     const status = $('#scannerStatus', modal);
     const scanner = new Html5Qrcode('scannerReader');
     let stopped = false;
@@ -934,7 +959,7 @@
       (decodedText) => onScan(decodedText),
       () => {}
     ).then(() => {
-      status.textContent = '가이드 사각형 안에 송장 바코드를 맞춰주세요.';
+      status.textContent = `가이드 사각형 안에 ${targetLabel}를 맞춰주세요.`;
     }).catch((err) => {
       console.warn(err);
       status.textContent = '카메라를 시작할 수 없습니다. 브라우저 권한 또는 HTTPS 접속 여부를 확인하고, 어려우면 직접 입력해주세요.';
@@ -952,7 +977,7 @@
     };
   }
 
-  function startNativeBarcodeScanner(onScan, modal) {
+  function startNativeBarcodeScanner(onScan, modal, targetLabel = '바코드') {
     const status = $('#scannerStatus', modal);
     const video = $('#nativeScannerVideo', modal);
     const reader = $('#scannerReader', modal);
@@ -974,7 +999,7 @@
         });
         video.srcObject = stream;
         await video.play();
-        status.textContent = '가이드 사각형 안에 송장 바코드를 맞춰주세요.';
+        status.textContent = `가이드 사각형 안에 ${targetLabel}를 맞춰주세요.`;
         tick();
       } catch (err) {
         console.warn(err);

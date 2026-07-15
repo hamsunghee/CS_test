@@ -2,8 +2,8 @@
  * 반품 검수 MVP - Google Apps Script backend
  *
  * 이번 버전 변경사항:
- * - doGet?action=lookup&invoice=송장번호 조회 추가
- * - 상품리스트 탭에서 송장번호/운송장번호/바코드번호 기준으로 주문번호·상품명 자동 매칭
+ * - doGet?action=lookup&productBarcode=상품바코드 조회 추가
+ * - 상품리스트 탭에서 상품바코드/바코드번호 기준으로 주문번호·상품명 자동 매칭
  * - GitHub Pages 같은 외부 정적 사이트에서도 읽을 수 있도록 JSONP callback 지원
  *
  * 설치 위치:
@@ -24,7 +24,7 @@ const PHOTO_FOLDER_NAME = '반품검수사진';
 // standalone Apps Script에서 쓰거나 저장 시트를 고정하고 싶으면 기록용 스프레드시트 ID를 넣으세요.
 const RECORD_SPREADSHEET_ID = '';
 
-// 송장번호 스캔 후 상품명을 자동 조회할 원본 스프레드시트/탭입니다.
+// 상품 바코드 스캔 후 상품명을 자동 조회할 원본 스프레드시트/탭입니다.
 const PRODUCT_SPREADSHEET_ID = '1lWJmD91V-i3f_GrLqn3DGwuZih2InxxzCc3v_uB0VzQ';
 const PRODUCT_SHEET_NAME = '상품리스트';
 
@@ -34,6 +34,7 @@ const MAKE_PHOTO_LINK_PUBLIC = false;
 
 const HEADERS = [
   '저장일시',
+  '상품바코드',
   '송장번호',
   '주문번호',
   '상품명',
@@ -61,7 +62,7 @@ function doGet(e) {
   return jsonOrJsonpOutput_(e, {
     ok: true,
     service: 'return-inspection-mvp',
-    message: '반품 검수 Google Apps Script Web App is running. POST 저장 또는 GET ?action=lookup&invoice=송장번호 조회를 사용할 수 있습니다.',
+    message: '반품 검수 Google Apps Script Web App is running. POST 저장 또는 GET ?action=lookup&productBarcode=상품바코드 조회를 사용할 수 있습니다.',
     sheetName: SHEET_NAME,
     productSheetName: PRODUCT_SHEET_NAME,
     now: new Date().toISOString()
@@ -82,6 +83,7 @@ function doPost(e) {
 
     sheet.appendRow([
       safe(payload.createdAt),
+      asText(payload.productBarcode),
       asText(payload.invoiceNumber),
       asText(payload.orderNumber),
       safe(payload.productName),
@@ -118,9 +120,9 @@ function doPost(e) {
 function lookupInvoice_(e) {
   try {
     const params = e && e.parameter ? e.parameter : {};
-    const invoice = String(params.invoice || params.tracking || params.barcode || '').trim();
-    if (!invoice) {
-      return jsonOrJsonpOutput_(e, { ok: false, found: false, error: 'invoice parameter is required' });
+    const barcode = String(params.productBarcode || params.barcode || params.invoice || params.tracking || '').trim();
+    if (!barcode) {
+      return jsonOrJsonpOutput_(e, { ok: false, found: false, error: 'productBarcode parameter is required' });
     }
 
     const ss = SpreadsheetApp.openById(PRODUCT_SPREADSHEET_ID);
@@ -129,20 +131,24 @@ function lookupInvoice_(e) {
 
     const values = sheet.getDataRange().getDisplayValues();
     if (!values || values.length < 2) {
-      return jsonOrJsonpOutput_(e, { ok: true, found: false, invoiceNumber: invoice, message: '상품리스트에 조회할 데이터가 없습니다.' });
+      return jsonOrJsonpOutput_(e, { ok: true, found: false, productBarcode: barcode, message: '상품리스트에 조회할 데이터가 없습니다.' });
     }
 
     const headers = values[0].map(function (v) { return String(v || '').trim(); });
-    const invoiceCol = findColumn_(headers, ['송장번호', '운송장번호', '운송장', '바코드번호', '바코드', '택배번호', 'trackingnumber', 'trackingno', 'invoice', 'barcode']);
+    const barcodeCol = findColumn_(headers, [
+      '상품바코드', '상품 바코드', '상품바코드번호', '제품바코드', '제품 바코드',
+      '바코드번호', '바코드', 'barcode', 'productbarcode', 'product barcode', 'jan', 'ean', 'upc',
+      '단품코드', '품목코드', '상품코드', '옵션코드', 'sku', 'itemcode', 'productcode'
+    ]);
     const orderCol = findColumn_(headers, ['주문번호', '주문번호쇼핑몰', '쇼핑몰주문번호', '주문코드', 'order', 'orderno', 'orderid']);
     const productCol = findColumn_(headers, ['상품명', '제품명', '품목명', '상품', 'product', 'productname', 'item', 'itemname']);
     const codeCol = findColumn_(headers, ['단품코드', '품목코드', '상품코드', '옵션코드', 'sku', 'itemcode', 'productcode']);
     const optionCol = findColumn_(headers, ['옵션', '옵션명', '옵션정보', '규격', '색상', '사이즈', 'option']);
     const quantityCol = findColumn_(headers, ['수량', '주문수량', 'qty', 'quantity']);
 
-    // 송장/바코드 컬럼명을 찾지 못하면 1열을 기준으로 매칭합니다.
-    const matchCol = invoiceCol >= 0 ? invoiceCol : 0;
-    const target = normalizeLookupKey_(invoice);
+    // 상품바코드 컬럼명을 찾지 못하면 1열을 기준으로 매칭합니다.
+    const matchCol = barcodeCol >= 0 ? barcodeCol : 0;
+    const target = normalizeLookupKey_(barcode);
     let foundRow = null;
     let rowIndex = -1;
 
@@ -160,9 +166,9 @@ function lookupInvoice_(e) {
       return jsonOrJsonpOutput_(e, {
         ok: true,
         found: false,
-        invoiceNumber: invoice,
+        productBarcode: barcode,
         matchedColumn: headers[matchCol] || 'A열',
-        message: '상품리스트에서 일치하는 송장번호를 찾지 못했습니다.'
+        message: '상품리스트에서 일치하는 상품 바코드를 찾지 못했습니다.'
       });
     }
 
@@ -176,11 +182,11 @@ function lookupInvoice_(e) {
     return jsonOrJsonpOutput_(e, {
       ok: true,
       found: true,
-      invoiceNumber: invoice,
+      productBarcode: barcode,
       rowNumber: rowIndex,
       matchedColumn: headers[matchCol] || 'A열',
       data: {
-        invoiceNumber: invoice,
+        productBarcode: barcode,
         orderNumber: orderNumber,
         productName: productName,
         productCode: productCode,
@@ -234,7 +240,8 @@ function ensureSheet(ss) {
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
 
-  const firstRow = sheet.getRange(1, 1, 1, HEADERS.length).getValues()[0];
+  const lastCol = Math.max(sheet.getLastColumn(), HEADERS.length);
+  const firstRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   const hasHeader = firstRow.some(function (v) { return v !== ''; });
 
   if (!hasHeader) {
@@ -245,7 +252,24 @@ function ensureSheet(ss) {
       .setBackground('#0f172a')
       .setFontColor('#ffffff');
     sheet.autoResizeColumns(1, HEADERS.length);
+    return sheet;
   }
+
+  // 이전 버전 시트에는 '상품바코드' 컬럼이 없을 수 있습니다.
+  // 기존 데이터 컬럼 밀림을 막기 위해 저장일시 바로 뒤에 새 컬럼을 삽입합니다.
+  const normalized = firstRow.map(normalizeHeader_);
+  if (normalized.indexOf(normalizeHeader_('상품바코드')) === -1) {
+    sheet.insertColumnAfter(1);
+    sheet.getRange(1, 2).setValue('상품바코드');
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), HEADERS.length));
+  headerRange
+    .setFontWeight('bold')
+    .setBackground('#0f172a')
+    .setFontColor('#ffffff');
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, Math.max(sheet.getLastColumn(), HEADERS.length));
 
   return sheet;
 }
@@ -254,7 +278,7 @@ function savePhotosToDrive_(photos, payload) {
   if (!photos.length) return [];
 
   const folder = getOrCreateFolder_(PHOTO_FOLDER_NAME);
-  const invoice = sanitizeFileName_(payload.invoiceNumber || 'no-invoice');
+  const invoice = sanitizeFileName_(payload.invoiceNumber || payload.productBarcode || 'no-code');
   const rowId = sanitizeFileName_(payload.id || Utilities.getUuid());
   const links = [];
 

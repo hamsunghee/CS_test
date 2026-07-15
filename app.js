@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw38AWma-DqnK8pQ-xhessKn6ZjFxYG_-znr1IAAVuL5mI9wEKdQTF3H6nbyzv9__Q/exec';
+  const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxAFChbpPXQ3qo4smvsA8rD5ATNdZy6PShAEY0cUyZqCiOe2oz7shTXf92m3Kz1IC0/exec';
   const LS_RECORDS = 'return_inspection_mvp_records_v1';
   const LS_CONFIG = 'return_inspection_mvp_config_v1';
   const MAX_PHOTOS = 4;

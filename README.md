@@ -33,7 +33,7 @@ https://script.google.com/macros/s/AKfycbw38AWma-DqnK8pQ-xhessKn6ZjFxYG_-znr1IAA
 `apps-script/Code.gs`에 아래 값이 들어가 있습니다.
 
 ```javascript
-const PRODUCT_SPREADSHEET_ID = 'AKfycbyajSw44ZyvOi5ZTvUqHZOE9crYcrloyxlS-43SP-3_kR5DgiWhYDCh7oF-fzAEVK8';
+const PRODUCT_SPREADSHEET_ID = '1lWJmD91V-i3f_GrLqn3DGwuZih2InxxzCc3v_uB0VzQ';
 const PRODUCT_SHEET_NAME = '상품리스트';
 ```
 

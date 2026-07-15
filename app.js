@@ -1,10 +1,12 @@
 (() => {
   'use strict';
 
-  const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw38AWma-DqnK8pQ-xhessKn6ZjFxYG_-znr1IAAVuL5mI9wEKdQTF3H6nbyzv9__Q/exec';
+  const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby1Va7aUCMpVTPO_cxBRW8uW_fFaLzHkwicu4u8aVt2UBwCJxmzo0_fnA12-2940v0/exec';
   const LS_RECORDS = 'return_inspection_mvp_records_v1';
   const LS_CONFIG = 'return_inspection_mvp_config_v1';
   const MAX_PHOTOS = 4;
+  const LOOKUP_MIN_LENGTH = 4;
+  const LOOKUP_DEBOUNCE_MS = 650;
 
   const state = {
     activeTab: 'form',
@@ -12,11 +14,19 @@
     config: {
       gasUrl: DEFAULT_GAS_URL,
       workerName: '',
-      storeLocalPhotos: true
+      storeLocalPhotos: true,
+      autoLookup: true
     },
     form: getEmptyForm(),
+    lookup: {
+      status: 'idle',
+      message: '',
+      invoiceNumber: '',
+      data: null
+    },
     historySearch: '',
-    historyFilter: 'all'
+    historyFilter: 'all',
+    lookupTimer: null
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -116,6 +126,57 @@
     return `<div class="notice ${type}"><strong>${icon}</strong><span>${escapeHtml(text)}</span></div>`;
   }
 
+
+  function renderLookupStatus() {
+    const lookup = state.lookup || { status: 'idle' };
+    if (lookup.status === 'idle') {
+      return '<div class="lookup-box muted">송장번호를 스캔/입력하면 Apps Script가 상품리스트 탭에서 주문번호와 상품명을 찾아옵니다.</div>';
+    }
+    if (lookup.status === 'loading') {
+      return `<div class="lookup-box loading"><span class="spinner"></span><span>${escapeHtml(lookup.message || '상품 정보를 조회 중입니다...')}</span></div>`;
+    }
+    if (lookup.status === 'found') {
+      const d = lookup.data || {};
+      const lines = [
+        d.orderNumber ? `<span><b>주문번호</b> ${escapeHtml(d.orderNumber)}</span>` : '',
+        d.productName ? `<span><b>상품명</b> ${escapeHtml(d.productName)}</span>` : '',
+        d.productCode ? `<span><b>단품코드</b> ${escapeHtml(d.productCode)}</span>` : '',
+        d.option ? `<span><b>옵션</b> ${escapeHtml(d.option)}</span>` : '',
+        d.quantity ? `<span><b>수량</b> ${escapeHtml(d.quantity)}</span>` : ''
+      ].filter(Boolean).join('');
+      return `<div class="lookup-box ok"><strong>상품리스트 매칭 완료</strong><div class="lookup-lines">${lines}</div></div>`;
+    }
+    if (lookup.status === 'not_found') {
+      return `<div class="lookup-box warn">${escapeHtml(lookup.message || '상품리스트에서 일치하는 송장번호를 찾지 못했습니다. 필요하면 직접 입력하세요.')}</div>`;
+    }
+    return `<div class="lookup-box error">${escapeHtml(lookup.message || '상품 정보 조회 중 오류가 발생했습니다. 직접 입력하거나 설정을 확인하세요.')}</div>`;
+  }
+
+  function updateLookupStatusDom() {
+    const el = $('#lookupStatus');
+    if (el) el.innerHTML = renderLookupStatus();
+  }
+
+  function setLookupStatus(status, message = '', data = null, invoiceNumber = '') {
+    state.lookup = { status, message, data, invoiceNumber };
+    updateLookupStatusDom();
+  }
+
+  function clearLookupTimer() {
+    if (state.lookupTimer) {
+      clearTimeout(state.lookupTimer);
+      state.lookupTimer = null;
+    }
+  }
+
+  function scheduleProductLookup(invoiceNumber) {
+    clearLookupTimer();
+    const invoice = String(invoiceNumber || '').trim();
+    if (!state.config.autoLookup) return setLookupStatus('idle');
+    if (!invoice || invoice.length < LOOKUP_MIN_LENGTH) return setLookupStatus('idle');
+    state.lookupTimer = setTimeout(() => lookupProductByInvoice(invoice), LOOKUP_DEBOUNCE_MS);
+  }
+
   function setActiveTab(tab) {
     state.activeTab = tab;
     $$('.nav-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === tab));
@@ -149,18 +210,20 @@
               <input id="invoiceNumber" class="input mono" type="text" inputmode="numeric" placeholder="송장번호 입력 또는 스캔" value="${escapeHtml(f.invoiceNumber)}" />
               <button id="scanBtn" class="btn btn-dark btn-scan" type="button">▦ 스캔</button>
             </div>
+            <div id="lookupStatus" class="lookup-status">${renderLookupStatus()}</div>
           </div>
         </section>
 
         <section class="card">
           <h2 class="card-title">상품 정보</h2>
+          <p class="card-subtitle">주문번호와 상품명/단품코드는 선택 입력입니다. 송장번호가 상품리스트 탭과 매칭되면 자동으로 채워집니다.</p>
           <div class="field">
-            <label for="orderNumber">주문번호 <span class="required">*</span></label>
-            <input id="orderNumber" class="input" type="text" placeholder="주문번호 입력" value="${escapeHtml(f.orderNumber)}" />
+            <label for="orderNumber">주문번호 <span class="optional">선택</span></label>
+            <input id="orderNumber" class="input" type="text" placeholder="자동 조회 또는 직접 입력" value="${escapeHtml(f.orderNumber)}" />
           </div>
           <div class="field">
-            <label for="productName">상품명 / 단품코드 <span class="required">*</span></label>
-            <input id="productName" class="input" type="text" placeholder="상품명 또는 단품코드 입력" value="${escapeHtml(f.productName)}" />
+            <label for="productName">상품명 / 단품코드 <span class="optional">선택</span></label>
+            <input id="productName" class="input" type="text" placeholder="자동 조회 또는 직접 입력" value="${escapeHtml(f.productName)}" />
           </div>
         </section>
 
@@ -224,7 +287,17 @@
       if (!el) return;
       el.addEventListener('input', () => { state.form[key] = el.value; });
     };
-    bindInput('invoiceNumber', 'invoiceNumber');
+    const invoiceInput = $('#invoiceNumber');
+    if (invoiceInput) {
+      invoiceInput.addEventListener('input', () => {
+        state.form.invoiceNumber = invoiceInput.value;
+        scheduleProductLookup(invoiceInput.value);
+      });
+      invoiceInput.addEventListener('blur', () => {
+        const invoice = invoiceInput.value.trim();
+        if (invoice && invoice.length >= LOOKUP_MIN_LENGTH) lookupProductByInvoice(invoice);
+      });
+    }
     bindInput('orderNumber', 'orderNumber');
     bindInput('productName', 'productName');
     bindInput('returnReasonDetail', 'returnReasonDetail');
@@ -262,6 +335,7 @@
     $('#resetFormBtn')?.addEventListener('click', () => {
       if (!confirm('입력 중인 내용을 초기화할까요?')) return;
       state.form = getEmptyForm();
+      setLookupStatus('idle');
       render();
     });
 
@@ -324,8 +398,6 @@
     const productName = f.productName.trim();
 
     if (!invoiceNumber) return toast('송장번호를 입력하거나 스캔해주세요.');
-    if (!orderNumber) return toast('주문번호를 입력해주세요.');
-    if (!productName) return toast('상품명을 입력해주세요.');
     if (f.returnReason === '기타' && !f.returnReasonDetail.trim()) return toast('기타 상세 사유를 입력해주세요.');
 
     const btn = $('#submitBtn');
@@ -365,6 +437,7 @@
     saveRecords();
 
     state.form = getEmptyForm();
+    setLookupStatus('idle');
     render();
     toast(synced ? '검수 완료: 구글시트 전송을 시도했습니다.' : '검수 완료: 기기에 임시 저장되었습니다.');
   }
@@ -655,6 +728,10 @@
           <input id="workerName" class="input" type="text" value="${escapeHtml(state.config.workerName || '')}" placeholder="예: 홍길동 / 반품검수 1번" />
         </div>
         <label style="display:flex; gap:8px; align-items:flex-start; margin:10px 0; font-size:12px; color:#475569; font-weight:800; line-height:1.45">
+          <input id="autoLookup" type="checkbox" ${state.config.autoLookup ? 'checked' : ''} style="margin-top:2px" />
+          <span>송장번호 입력/스캔 후 상품리스트 탭에서 주문번호·상품명을 자동 조회합니다.</span>
+        </label>
+        <label style="display:flex; gap:8px; align-items:flex-start; margin:10px 0; font-size:12px; color:#475569; font-weight:800; line-height:1.45">
           <input id="storeLocalPhotos" type="checkbox" ${state.config.storeLocalPhotos ? 'checked' : ''} style="margin-top:2px" />
           <span>전송 후에도 이 기기 내역에 사진 미리보기를 보관합니다. 저장공간이 부족하면 체크 해제하세요.</span>
         </label>
@@ -667,7 +744,8 @@
       <section class="card">
         <h2 class="card-title">현재 구현 범위</h2>
         ${notice('info', '이 MVP는 현장 입력, 사진 첨부, 구글시트 적재, 로컬 임시보관까지 구현합니다.')}
-        ${notice('warn', '송장 스캔 후 주문정보 자동조회, 이카운트 ERP 자동반영, 직원 로그인/권한관리는 이 코드만으로는 구현되어 있지 않습니다.')}
+        ${notice('info', '송장 스캔 후 상품리스트 탭에서 주문번호와 상품명을 조회하는 기능을 추가했습니다. 단, 상품리스트 탭에 해당 송장번호가 미리 있어야 합니다.')}
+        ${notice('warn', '이카운트 ERP 실시간 조회/자동반영, 직원 로그인/권한관리는 이 코드만으로는 구현되어 있지 않습니다.')}
       </section>
 
       <section class="card">
@@ -681,6 +759,7 @@
       const gasUrl = $('#gasUrl').value.trim();
       state.config.gasUrl = gasUrl || DEFAULT_GAS_URL;
       state.config.workerName = $('#workerName').value.trim();
+      state.config.autoLookup = $('#autoLookup').checked;
       state.config.storeLocalPhotos = $('#storeLocalPhotos').checked;
       saveConfig();
       render();
@@ -719,8 +798,73 @@
   }
 
   function copyInstallGuide() {
-    const text = `반품 검수 MVP 설치 순서\n\n1. ZIP 파일 압축 해제\n2. index.html, style.css, app.js를 같은 폴더에 둠\n3. 전직원 사용용이면 HTTPS 호스팅에 업로드\n   예: GitHub Pages, Netlify, Cloudflare Pages, 사내 웹서버\n4. Google Apps Script 편집기에서 apps-script/Code.gs 붙여넣기\n5. 배포 > 새 배포 > 웹 앱\n   - 실행 권한: 나\n   - 액세스 권한: 모든 사용자 또는 회사 정책에 맞는 사용자\n6. 생성된 Web App URL을 app.js의 DEFAULT_GAS_URL 또는 앱 설정 탭에 입력\n7. 모바일에서 링크 접속 후 카메라 권한 허용\n`;
+    const text = `반품 검수 MVP 설치 순서\n\n1. ZIP 파일 압축 해제\n2. index.html, style.css, app.js를 같은 폴더에 둠\n3. 전직원 사용용이면 HTTPS 호스팅에 업로드\n   예: GitHub Pages, Netlify, Cloudflare Pages, 사내 웹서버\n4. Google Apps Script 편집기에서 apps-script/Code.gs 붙여넣기\n5. 배포 > 새 배포 > 웹 앱\n   - 실행 권한: 나\n   - 액세스 권한: 모든 사용자 또는 회사 정책에 맞는 사용자\n6. 생성된 Web App URL을 app.js의 DEFAULT_GAS_URL 또는 앱 설정 탭에 입력\n7. 상품 자동조회 사용 시 apps-script/Code.gs의 PRODUCT_SPREADSHEET_ID와 PRODUCT_SHEET_NAME 확인\n8. 모바일에서 링크 접속 후 카메라 권한 허용\n`;
     navigator.clipboard?.writeText(text).then(() => toast('설치 순서를 복사했습니다.')).catch(() => toast('복사에 실패했습니다.'));
+  }
+
+
+  async function lookupProductByInvoice(invoiceNumber) {
+    const invoice = String(invoiceNumber || '').trim();
+    if (!invoice || invoice.length < LOOKUP_MIN_LENGTH) return;
+    if (!isGasConfigured()) {
+      setLookupStatus('error', 'Apps Script URL이 설정되어 있지 않아 상품 조회를 할 수 없습니다.');
+      return;
+    }
+
+    setLookupStatus('loading', `송장번호 ${invoice} 조회 중...`, null, invoice);
+    try {
+      const result = await jsonpRequest(state.config.gasUrl.trim(), {
+        action: 'lookup',
+        invoice: invoice
+      }, 12000);
+
+      if (String(state.form.invoiceNumber || '').trim() !== invoice) return;
+
+      if (result && result.ok && result.found) {
+        const data = result.data || {};
+        if (data.orderNumber) state.form.orderNumber = data.orderNumber;
+        const productValue = data.productDisplay || [data.productName, data.productCode].filter(Boolean).join(' / ');
+        if (productValue) state.form.productName = productValue;
+
+        const orderEl = $('#orderNumber');
+        const productEl = $('#productName');
+        if (orderEl) orderEl.value = state.form.orderNumber;
+        if (productEl) productEl.value = state.form.productName;
+
+        setLookupStatus('found', '상품리스트 매칭 완료', data, invoice);
+        toast('상품 정보가 자동 입력되었습니다.');
+        return;
+      }
+
+      setLookupStatus('not_found', '상품리스트에서 일치하는 송장번호를 찾지 못했습니다. 필요하면 상품 정보를 직접 입력하세요.', null, invoice);
+    } catch (err) {
+      console.warn('lookup failed', err);
+      setLookupStatus('error', '상품 조회에 실패했습니다. Apps Script 배포 URL/권한과 상품리스트 탭명을 확인하세요.', null, invoice);
+    }
+  }
+
+  function jsonpRequest(baseUrl, params = {}, timeoutMs = 10000) {
+    return new Promise((resolve, reject) => {
+      const callbackName = `__returnLookup_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const url = new URL(baseUrl);
+      Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+      url.searchParams.set('callback', callbackName);
+
+      const script = document.createElement('script');
+      const timer = setTimeout(() => cleanup(() => reject(new Error('lookup timeout'))), timeoutMs);
+
+      function cleanup(done) {
+        clearTimeout(timer);
+        try { delete window[callbackName]; } catch (err) { window[callbackName] = undefined; }
+        if (script.parentNode) script.parentNode.removeChild(script);
+        if (typeof done === 'function') done();
+      }
+
+      window[callbackName] = (data) => cleanup(() => resolve(data));
+      script.onerror = () => cleanup(() => reject(new Error('lookup script load failed')));
+      script.src = url.toString();
+      document.head.appendChild(script);
+    });
   }
 
   function openLightbox(src) {
@@ -762,6 +906,7 @@
       await close();
       render();
       toast(`스캔 완료: ${state.form.invoiceNumber}`);
+      lookupProductByInvoice(state.form.invoiceNumber);
     };
 
     if (window.Html5Qrcode) {

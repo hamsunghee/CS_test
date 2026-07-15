@@ -498,3 +498,44 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 @media (min-width: 700px) {
   .app-shell { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 }
+
+.optional {
+  color: var(--muted);
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  margin-left: 4px;
+}
+.lookup-status { margin-top: 10px; }
+.lookup-box {
+  border-radius: 14px;
+  padding: 10px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  border: 1px solid var(--line);
+  background: #f8fafc;
+  color: var(--muted);
+}
+.lookup-box.ok { background: var(--green-soft); color: var(--green-dark); border-color: #bbf7d0; }
+.lookup-box.warn { background: var(--amber-soft); color: var(--amber); border-color: #fde68a; }
+.lookup-box.error { background: var(--red-soft); color: var(--red); border-color: #fecdd3; }
+.lookup-box.loading { background: var(--blue-soft); color: var(--blue); border-color: #bfdbfe; display: flex; gap: 8px; align-items: center; }
+.lookup-lines {
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+  font-weight: 700;
+}
+.lookup-lines span b { margin-right: 5px; font-weight: 900; }
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  display: inline-block;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

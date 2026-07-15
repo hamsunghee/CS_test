@@ -2,13 +2,20 @@
 
 이 폴더는 Google AI Studio/React/Vite 없이 전직원이 링크로 사용할 수 있는 현장 입력용 MVP입니다.
 
+## 이번 수정사항
+
+- 상품 정보의 `주문번호`, `상품명 / 단품코드` 필수 입력을 해제했습니다.
+- 송장번호 스캔/입력 후 Google Sheet의 `상품리스트` 탭에서 자동 조회하는 기능을 추가했습니다.
+- 조회가 성공하면 `주문번호`, `상품명 / 옵션 / 단품코드`가 자동으로 입력됩니다.
+- 조회가 실패해도 저장은 가능합니다. 이 경우 상품 정보는 직접 입력하거나 빈 값으로 저장할 수 있습니다.
+
 ## 포함 파일
 
 - `index.html` : 앱 화면. 바코드 인식 안정성을 위해 `html5-qrcode` CDN을 사용합니다.
 - `index-no-cdn.html` : 외부 CDN을 전혀 쓰지 않는 버전. 브라우저 기본 `BarcodeDetector` 지원 기기에서만 바코드 스캔이 됩니다.
 - `style.css` : 모바일 UI 스타일
-- `app.js` : 검수 입력, 바코드 스캔, 사진 압축, 로컬 저장, Apps Script 전송
-- `apps-script/Code.gs` : Google Sheet/Drive에 저장하는 Apps Script 서버 코드
+- `app.js` : 검수 입력, 바코드 스캔, 상품리스트 자동 조회, 사진 압축, 로컬 저장, Apps Script 전송
+- `apps-script/Code.gs` : Google Sheet/Drive 저장 + 상품리스트 조회용 Apps Script 서버 코드
 
 ## 현재 기본 Apps Script URL
 
@@ -20,6 +27,37 @@ https://script.google.com/macros/s/AKfycbw38AWma-DqnK8pQ-xhessKn6ZjFxYG_-znr1IAA
 
 앱의 `설정` 탭에서도 URL을 교체할 수 있습니다.
 
+## 상품리스트 자동 조회 설정
+
+`apps-script/Code.gs`에 아래 값이 들어가 있습니다.
+
+```javascript
+const PRODUCT_SPREADSHEET_ID = '1lWJmD91V-i3f_GrLqn3DGwuZih2InxxzCc3v_uB0VzQ';
+const PRODUCT_SHEET_NAME = '상품리스트';
+```
+
+상품리스트 탭에는 최소한 아래 열 중 하나가 필요합니다.
+
+```text
+송장번호 / 운송장번호 / 바코드번호 / 바코드 / 택배번호
+```
+
+그리고 자동 입력을 위해 아래 열을 인식합니다.
+
+```text
+주문번호
+상품명 / 제품명 / 품목명
+단품코드 / 품목코드 / 상품코드 / 옵션코드 / SKU
+옵션 / 옵션명 / 옵션정보
+수량 / 주문수량
+```
+
+컬럼명이 조금 달라도 자동 인식하도록 만들어두었지만, 가장 안전한 헤더 예시는 아래와 같습니다.
+
+```text
+송장번호 | 주문번호 | 상품명 | 단품코드 | 옵션 | 수량
+```
+
 ## 구현된 기능
 
 - 송장번호 수기 입력
@@ -27,7 +65,8 @@ https://script.google.com/macros/s/AKfycbw38AWma-DqnK8pQ-xhessKn6ZjFxYG_-znr1IAA
   - `html5-qrcode` CDN 우선 사용
   - CDN 로딩 실패 시 브라우저 기본 `BarcodeDetector` fallback
   - 둘 다 불가하면 수기 입력
-- 주문번호/상품명 입력
+- 송장번호 기준 상품리스트 탭 자동 조회
+- 주문번호/상품명 선택 입력
 - 반품 사유 선택: 단순변심, 파손, 불량, 오배송, 기타
 - 검수 결과 선택: 재입고, 폐기, 공장반품
 - 사진 최대 4장 촬영/첨부 및 자동 압축
@@ -38,13 +77,13 @@ https://script.google.com/macros/s/AKfycbw38AWma-DqnK8pQ-xhessKn6ZjFxYG_-znr1IAA
 
 ## 구현되지 않은 기능
 
-- 송장 스캔 후 주문정보 자동조회
+- 이카운트 ERP 실시간 API 조회
 - 이카운트 ERP 자동 반영
-- 카페24/이카운트 주문 매칭
+- 카페24/이카운트 실시간 주문 매칭
 - 직원 로그인/권한 관리
 - 서버 DB 기반 실시간 관리자 화면
 
-위 기능은 별도 API/백엔드 개발이 필요합니다.
+즉, 현재 자동 조회는 `상품리스트` 탭에 미리 저장된 송장번호와 매칭하는 방식입니다. ERP에서 실시간으로 바로 조회하는 구조는 별도 API/백엔드 개발이 필요합니다.
 
 ## 배포 방법
 
@@ -64,27 +103,37 @@ https://script.google.com/macros/s/AKfycbw38AWma-DqnK8pQ-xhessKn6ZjFxYG_-znr1IAA
 
 ### 2. Google Apps Script 배포
 
-이미 제공하신 Apps Script URL을 계속 쓸 수도 있습니다.
-다만 현재 URL을 브라우저에서 직접 열면 `doGet` 함수가 없다는 오류가 나오므로, 상태 확인 화면까지 원하면 `apps-script/Code.gs`로 교체하세요.
+기존 Apps Script URL을 계속 쓰려면 **해당 스크립트 프로젝트의 코드도 이번 `apps-script/Code.gs`로 교체한 뒤 새 버전으로 배포**해야 합니다.
 
 신규 설치 순서:
 
-1. Google Sheet 생성
+1. 기록용 Google Sheet 열기
 2. `확장 프로그램 > Apps Script`
 3. `apps-script/Code.gs` 전체 붙여넣기
-4. 저장
-5. `배포 > 새 배포 > 웹 앱`
-6. 실행 권한: `나`
-7. 액세스 권한: 회사 정책에 맞게 선택
-   - 완전 간편 운영: 모든 사용자
+4. `PRODUCT_SPREADSHEET_ID`, `PRODUCT_SHEET_NAME` 확인
+5. 저장
+6. `배포 > 새 배포 > 웹 앱`
+7. 실행 권한: `나`
+8. 액세스 권한: 회사 정책에 맞게 선택
+   - 간편 운영: 모든 사용자
    - Google Workspace 내부 운영: 조직 내 사용자 또는 접근 제한 설정
-8. 배포 후 Web App URL을 앱 설정 탭 또는 `app.js`에 입력
+9. 배포 후 Web App URL을 앱 설정 탭 또는 `app.js`에 입력
+
+## 테스트 방법
+
+1. 상품리스트 탭에 테스트 송장번호 1건을 추가합니다.
+2. 앱에서 같은 송장번호를 입력하거나 스캔합니다.
+3. 조회 성공 메시지와 함께 주문번호/상품명이 자동 입력되는지 확인합니다.
+4. 저장 후 `반품검수대장` 탭에 행이 추가되는지 확인합니다.
+5. 사진을 첨부한 경우 Drive 사진 링크가 열리는지 확인합니다.
 
 ## 주의사항
 
-- `fetch(..., mode: 'no-cors')` 방식이라 브라우저에서는 Apps Script 응답 내용을 직접 확인할 수 없습니다.
-- 앱에서는 네트워크 요청이 완료되면 `전송 시도 성공`으로 표시합니다.
+- 상품 자동 조회는 `상품리스트` 탭에 해당 송장번호가 미리 있어야 동작합니다.
+- 반품 송장번호가 원출고 송장번호와 다르면 매칭되지 않을 수 있습니다.
+- 저장 전송은 `fetch(..., mode: 'no-cors')` 방식이라 브라우저에서는 Apps Script 응답 내용을 직접 확인할 수 없습니다.
 - 실제 저장 여부는 Google Sheet에 행이 추가되었는지 확인해야 합니다.
+- 상품 조회는 응답을 읽어야 하므로 JSONP 방식으로 별도 구현되어 있습니다.
 - 사진은 Apps Script가 실행되는 Google 계정의 Drive 폴더에 저장됩니다.
 - 사진 링크 공유 범위는 `apps-script/Code.gs`의 `MAKE_PHOTO_LINK_PUBLIC` 값으로 제어합니다.
 - 로컬 내역은 직원 각자의 휴대폰 브라우저에 저장됩니다. 브라우저 캐시 삭제/기기 변경 시 사라질 수 있습니다.
@@ -92,4 +141,5 @@ https://script.google.com/macros/s/AKfycbw38AWma-DqnK8pQ-xhessKn6ZjFxYG_-znr1IAA
 ## 운영 추천
 
 1차 MVP는 이 코드로 현장 입력과 구글시트 관리를 시작합니다.
+상품 자동 조회가 필요하면 ERP/택배/주문 데이터를 `상품리스트` 탭에 주기적으로 넣어두면 됩니다.
 2차에서 이카운트 API 연동 담당자가 Google Sheet 데이터를 기준으로 ERP 반영 자동화를 붙이는 방식을 추천합니다.
